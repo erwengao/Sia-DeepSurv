@@ -66,7 +66,7 @@ model = generate_model(10, pretrain=True)
 model.to(device)
 criterion = NegativeLogLikelihood(model, device=device).to(device)
 optimizer = eval('optim.{}'.format
-                 ('SGD'))(model.parameters(), lr=1e-2)
+                 ('SGD'))(model.parameters(), lr=1e-3)
 if len(device_ids) > 1:
     print("Let's use", len(device_ids), "GPUs!")
     model = nn.DataParallel(model, device_ids=device_ids)
@@ -79,7 +79,7 @@ flag = 0
 for epoch in range(num_epochs):
     print('Epoch {}/{}'.format(epoch, num_epochs - 1))
     print('-' * 100)
-    lr = adjust_learning_rate(optimizer, epoch, 1e-2, 1.636e-4)
+    lr = adjust_learning_rate(optimizer, epoch, 1e-3, 1.636e-4)
     total_train_loss = 0
     total_train_c = 0
     model.train()
