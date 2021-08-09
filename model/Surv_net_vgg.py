@@ -51,14 +51,12 @@ class SDS_VGG(nn.Module):
         net.append(nn.MaxPool3d(kernel_size=1, stride=2))
 
         # add net into class property
-        self.extract_feature = nn.Sequential(*net)
+        self.extract_feature1 = nn.Sequential(*net)
+        self.extract_feature2 = nn.Sequential(*net)
 
         # define an empty container for Linear operations
         classifier = []
-        classifier.append(nn.Linear(in_features=512*1*2*2, out_features=1024))
-        classifier.append(nn.ReLU())
-        classifier.append(nn.Dropout(p=0.5))
-        classifier.append(nn.Linear(in_features=1024, out_features=512))
+        classifier.append(nn.Linear(in_features=512*1*2*2, out_features=512))
         classifier.append(nn.ReLU())
         classifier.append(nn.Dropout(p=0.5))
         classifier.append(nn.Linear(in_features=512, out_features=self.num_classes))
@@ -68,8 +66,8 @@ class SDS_VGG(nn.Module):
 
 
     def forward(self, x1,x2):
-        x1 = self.extract_feature(x1)
-        x2 = self.extract_feature(x2)
+        x1 = self.extract_feature1(x1)
+        x2 = self.extract_feature2(x2)
         x1 = torch.flatten(x1, 1)
         x2 = torch.flatten(x2, 1)
         feature = torch.abs(x1 - x2)
