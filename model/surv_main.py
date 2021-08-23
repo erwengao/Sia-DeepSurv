@@ -1,5 +1,5 @@
 from project.shandong.survival.model.surv_net import generate_model
-from project.shandong.survival.model.surv_net import NegativeLogLikelihood
+from project.shandong.survival.model.surv_utils import NegativeLogLikelihood
 from project.shandong.survival.model.Surv_dataset import SurvFolder
 from project.shandong.survival.model.surv_utils import c_index, adjust_learning_rate
 import torchio.transforms as transforms
@@ -12,24 +12,26 @@ import os
 import datetime
 from torch.nn import init
 import torch.optim as optim
+from project.shandong.survival.model.Surv_net_vgg import SDS_VGG
 
 t = datetime.date.today()
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 device_ids = [0]
 data_transforms = {
     'train': transforms.Compose([
-        tio.Resample(1),
+        # tio.Resample((1, 1, 1)),
         # transforms.ToCanonical(p=0.5, copy=False),
-        transforms.RandomFlip(flip_probability=0.5),
+        # transforms.RandomFlip(flip_probability=0.5),
         transforms.RandomNoise(),
         transforms.ZNormalization()
     ]),
     'test': transforms.Compose([
-        tio.Resample(1),
+        # tio.Resample((1, 1, 1)),
         transforms.ZNormalization()
     ]),
 }
-data_dir = r'/data/gaohan/deeplearning/project/shandong/survival/train_test/3d_split_1'
+data_dir = r'/data/gaohan/deeplearning/project/shandong/survival/train_test/3d_split_4'
+split = data_dir.split('/')[-1]
 DataSets = {x: SurvFolder(os.path.join(data_dir, x), data_transforms[x])
             for x in ['train', 'test']}
 # DataSets = {x: SurvFolder(os.path.join(data_dir, x))
@@ -61,17 +63,19 @@ def weigth_init(m):
         m.bias.data.zero_()
 
 
-model = generate_model(10, pretrain=True)
-# model.apply(weigth_init)
+model = generate_model(18, pretrain=True)
+# model = SDS_VGG()
+model.apply(weigth_init)
 model.to(device)
+
 criterion = NegativeLogLikelihood(model, device=device).to(device)
 optimizer = eval('optim.{}'.format
-                 ('SGD'))(model.parameters(), lr=1e-3)
+                 ('SGD'))(model.parameters(), lr=1e-2)
 if len(device_ids) > 1:
     print("Let's use", len(device_ids), "GPUs!")
     model = nn.DataParallel(model, device_ids=device_ids)
-num_epochs = 50
-patience = 50
+num_epochs = 100
+patience = 10
 best_c_index = 0
 best_epoch = 0
 flag = 0
@@ -79,7 +83,7 @@ flag = 0
 for epoch in range(num_epochs):
     print('Epoch {}/{}'.format(epoch, num_epochs - 1))
     print('-' * 100)
-    lr = adjust_learning_rate(optimizer, epoch, 1e-3, 1.636e-4)
+    lr = adjust_learning_rate(optimizer, epoch, 1e-2, 1e-1)
     total_train_loss = 0
     total_train_c = 0
     model.train()
@@ -112,21 +116,20 @@ for epoch in range(num_epochs):
             valid_c = c_index(-risk_pred, y, e)
             total_val_loss += valid_loss / len(SurDataLoaders['test'])
             total_val_c += valid_c / len(SurDataLoaders['test'])
+            if total_val_c > 0.70 and total_train_c > 0.70:
+                checkpoint = {'model': model,
+                              'model_state_dict': model.state_dict(),
+                              'optimizer': optimizer,
+                              'optimizer_state_dict': optimizer.state_dict(),
+                              'epoch': epoch
+                              }
+                torch.save(checkpoint, r"/data/gaohan/deeplearning/project/shandong/survival/result/epoch/SDS/"
+                                       r"Epoch {:02d}--train {:0.4f}--test {:0.4f}--{:s}--".format(epoch, total_train_c,
+                                                                                             total_val_c, split) + str(t) + '.pkl')
             if best_c_index < total_val_c:
                 best_c_index = total_val_c
                 best_epoch = epoch
                 flag = 0
-                if total_val_c > 0.6 and total_train_c > 0.6:
-                    checkpoint = {'model': model,
-                                  'model_state_dict': model.state_dict(),
-                                  'optimizer': optimizer,
-                                  'optimizer_state_dict': optimizer.state_dict(),
-                                  'epoch': epoch
-                                  }
-                    torch.save(checkpoint, r"/data/gaohan/deeplearning/project/shandong/survival/result/epoch/SDS/"
-                                           r"Epoch {:02d}--train {:0.2f}--test {:0.2f}--".format(epoch, total_train_c,
-                                                                                                 total_val_c) + str(
-                        t) + '.pkl')
             else:
                 flag += 1
                 if flag >= patience:
